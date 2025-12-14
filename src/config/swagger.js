@@ -49,12 +49,8 @@ Pour toute question ou problème, consultez le README.md ou contactez l'équipe 
     },
     servers: [
       {
-        url: `http://localhost:${config.port}`,
-        description: 'Serveur de développement'
-      },
-      {
-        url: 'https://api.tokengatedDAO.com',
-        description: 'Serveur de production'
+        url: '/',
+        description: 'Serveur API'
       }
     ],
     tags: [
