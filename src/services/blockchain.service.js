@@ -25,10 +25,10 @@ class BlockchainService {
     this.provider.lookupAddress = async () => null;
     this.provider.getEnsAddress = async () => null;
 
-    // Initialisation du contrat Token avec normalisation de l'adresse (safe casing + trim)
+    // Initialisation du contrat Token avec normalisation de l'adresse (safe casing + trim + checksum)
     const sanitizedTokenAddress = config.tokenContractAddress ? String(config.tokenContractAddress).trim().toLowerCase() : ethers.ZeroAddress;
     this.tokenContract = new ethers.Contract(
-      sanitizedTokenAddress,
+      ethers.getAddress(sanitizedTokenAddress),
       TOKEN_ABI,
       this.provider
     );
