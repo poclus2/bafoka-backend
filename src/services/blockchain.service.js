@@ -12,6 +12,19 @@ class BlockchainService {
 
     this.provider = new ethers.JsonRpcProvider(config.celoRpcUrl, network, { staticNetwork: network });
 
+    // MONKEY PATCH INTELLIGENT: 
+    // 1. Si on demande de résoudre une adresse valide, on la retourne direct (pas d'appel ENS)
+    // 2. Sinon on retourne null (pas de résolution)
+    const originalResolveName = this.provider.resolveName.bind(this.provider);
+    this.provider.resolveName = async (name) => {
+      if (ethers.isAddress(name)) return name;
+      return null;
+    };
+
+    // Désactiver le reste des fonctions ENS
+    this.provider.lookupAddress = async () => null;
+    this.provider.getEnsAddress = async () => null;
+
     // Initialisation du contrat Token avec normalisation de l'adresse (safe casing + trim)
     const sanitizedTokenAddress = config.tokenContractAddress ? String(config.tokenContractAddress).trim().toLowerCase() : ethers.ZeroAddress;
     this.tokenContract = new ethers.Contract(
