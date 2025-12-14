@@ -4,8 +4,11 @@ import { TOKEN_ABI } from '../contracts/abis.js';
 
 class BlockchainService {
   constructor() {
-    // Initialisation du provider Celo
-    this.provider = new ethers.JsonRpcProvider(config.celoRpcUrl);
+    // Initialisation du provider Celo avec Network statique pour éviter les erreurs ENS
+    const chainId = parseInt(config.celoChainId || '11142220');
+    // On définit le réseau manuellement pour empêcher Ethers de chercher ENS sur un réseau inconnu
+    const network = new ethers.Network("celo-sepolia", chainId);
+    this.provider = new ethers.JsonRpcProvider(config.celoRpcUrl, network, { staticNetwork: network });
 
     // Initialisation du contrat Token
     this.tokenContract = new ethers.Contract(
