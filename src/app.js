@@ -14,14 +14,8 @@ const app = express();
 
 // Middlewares de sécurité (avec exception pour Swagger UI)
 app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-      "img-src": ["'self'", "data:", "https://validator.swagger.io"],
-      "script-src": ["'self'", "'unsafe-inline'"],
-      "style-src": ["'self'", "'unsafe-inline'"],
-    },
-  },
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
 }));
 app.use(cors({
   origin: config.nodeEnv === 'development' ? '*' : process.env.ALLOWED_ORIGINS?.split(','),
