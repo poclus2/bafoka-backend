@@ -1,0 +1,51 @@
+# Node
+node_modules
+npm-debug.log
+yarn-error.log
+package-lock.json
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Git
+.git
+.gitignore
+.github
+
+# Documentation
+README.md
+*.md
+!DEPLOYMENT_GUIDE.md
+
+# Hardhat (smart contracts - pas nécessaire en production)
+hardhat
+cache
+artifacts
+typechain-types
+
+# Tests
+test
+tests
+*.test.js
+coverage
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Logs
+logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+deployments.json
+scripts
