@@ -8,6 +8,8 @@ class BlockchainService {
     const chainId = parseInt(config.celoChainId || '11142220');
     // On définit le réseau manuellement pour empêcher Ethers de chercher ENS sur un réseau inconnu
     const network = new ethers.Network("celo-sepolia", chainId);
+    network.ensAddress = null; // Désactivation explicite de l'ENS
+
     this.provider = new ethers.JsonRpcProvider(config.celoRpcUrl, network, { staticNetwork: network });
 
     // Initialisation du contrat Token
