@@ -28,10 +28,16 @@ class BlockchainService {
     // Initialisation du contrat Token avec normalisation de l'adresse (safe casing + trim + checksum)
     let rawAddress = config.tokenContractAddress ? String(config.tokenContractAddress).trim().toLowerCase() : ethers.ZeroAddress;
 
-    // FIX AUTOMATIQUE POUR TYPO CONNUE (43 chars au lieu de 42)
-    if (rawAddress.length === 43 && rawAddress.startsWith('0x')) {
-      console.warn(`⚠️ Adresse détectée avec longueur incorrecte (43 chars). Tentative de correction automatique...`);
-      rawAddress = rawAddress.slice(0, -1);
+    // BAD ADDRESS LIST (Adresses connues pour être vides ou problématiques)
+    const BAD_ADDRESSES = [
+      '0xf710a9d413bed1e0c600f099081bc441106e03bd', // Empty address
+      '0xf710a9d413bed1e0c600f099081bc441106e03bdd' // Typo 43 chars
+    ];
+
+    // RESCUE MODE: Si l'adresse est mauvaise ou vide, on force la nouvelle adresse valide déployée
+    if (!rawAddress || rawAddress === ethers.ZeroAddress || BAD_ADDRESSES.includes(rawAddress) || rawAddress.length === 43) {
+      console.warn(`🚨 RESCUE MODE: Adresse Token invalide '${rawAddress}' détectée. Bascule forcée sur le nouveau déploiement.`);
+      rawAddress = '0xAc756C73C981D0F55226570fE8c8C44498D45585';
     }
 
     this.tokenContract = new ethers.Contract(
