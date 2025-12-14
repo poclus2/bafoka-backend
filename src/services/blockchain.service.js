@@ -26,9 +26,16 @@ class BlockchainService {
     this.provider.getEnsAddress = async () => null;
 
     // Initialisation du contrat Token avec normalisation de l'adresse (safe casing + trim + checksum)
-    const sanitizedTokenAddress = config.tokenContractAddress ? String(config.tokenContractAddress).trim().toLowerCase() : ethers.ZeroAddress;
+    let rawAddress = config.tokenContractAddress ? String(config.tokenContractAddress).trim().toLowerCase() : ethers.ZeroAddress;
+
+    // FIX AUTOMATIQUE POUR TYPO CONNUE (43 chars au lieu de 42)
+    if (rawAddress.length === 43 && rawAddress.startsWith('0x')) {
+      console.warn(`⚠️ Adresse détectée avec longueur incorrecte (43 chars). Tentative de correction automatique...`);
+      rawAddress = rawAddress.slice(0, -1);
+    }
+
     this.tokenContract = new ethers.Contract(
-      ethers.getAddress(sanitizedTokenAddress),
+      ethers.getAddress(rawAddress),
       TOKEN_ABI,
       this.provider
     );
