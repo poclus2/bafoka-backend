@@ -13,6 +13,11 @@ class BlockchainService {
     // Astuce Ethers v6: passer 'undefined' en 2eme arg et le network dans les options
     this.provider = new ethers.JsonRpcProvider(config.celoRpcUrl, undefined, { staticNetwork: network });
 
+    // MONKEY PATCH: Surcharge radicale pour interdire toute résolution ENS
+    this.provider.resolveName = async () => null;
+    this.provider.lookupAddress = async () => null;
+    this.provider.getEnsAddress = async () => null;
+
     // Initialisation du contrat Token
     this.tokenContract = new ethers.Contract(
       config.tokenContractAddress,
