@@ -7,10 +7,11 @@ class BlockchainService {
     // Initialisation du provider Celo avec Network statique pour éviter les erreurs ENS
     const chainId = parseInt(config.celoChainId || '11142220');
     // On définit le réseau manuellement pour empêcher Ethers de chercher ENS sur un réseau inconnu
-    const network = new ethers.Network("celo-sepolia", chainId);
+    const network = new ethers.Network("custom-celo", chainId);
     network.ensAddress = null; // Désactivation explicite de l'ENS
 
-    this.provider = new ethers.JsonRpcProvider(config.celoRpcUrl, network, { staticNetwork: network });
+    // Astuce Ethers v6: passer 'undefined' en 2eme arg et le network dans les options
+    this.provider = new ethers.JsonRpcProvider(config.celoRpcUrl, undefined, { staticNetwork: network });
 
     // Initialisation du contrat Token
     this.tokenContract = new ethers.Contract(
@@ -341,7 +342,8 @@ class BlockchainService {
       }
 
       // Exécution du transfert
-      const tx = await tokenWithSigner.transfer(toAddress, amountInWei);
+      const checksumAddress = ethers.getAddress(toAddress);
+      const tx = await tokenWithSigner.transfer(checksumAddress, amountInWei);
       const receipt = await tx.wait();
 
       return {
@@ -372,13 +374,16 @@ class BlockchainService {
         throw new Error('Clé privée administrateur non configurée');
       }
 
+      // Forcer le format Checksum Address pour éviter qu'Ethers ne pense que c'est un nom ENS
+      const checksumAddress = ethers.getAddress(toAddress);
+
       const tokenWithSigner = this.tokenContract.connect(this.adminWallet);
       const decimals = await tokenWithSigner.decimals();
       const amountInWei = ethers.parseUnits(amount.toString(), decimals);
 
-      console.log(`🔨 Mint de ${amount} tokens vers ${toAddress}...`);
+      console.log(`🔨 Mint de ${amount} tokens vers ${checksumAddress}...`);
 
-      const tx = await tokenWithSigner.mint(toAddress, amountInWei);
+      const tx = await tokenWithSigner.mint(checksumAddress, amountInWei);
       const receipt = await tx.wait();
 
       console.log(`✅ Mint confirmé dans le bloc ${receipt.blockNumber}`);
@@ -426,9 +431,11 @@ class BlockchainService {
 
       console.log(`💸 Envoi de ${amount} CELO à ${toAddress}...`);
 
+      const checksumAddress = ethers.getAddress(toAddress);
+
       // Création et envoi de la transaction
       const tx = await this.adminWallet.sendTransaction({
-        to: toAddress,
+        to: checksumAddress,
         value: amountInWei
       });
 
