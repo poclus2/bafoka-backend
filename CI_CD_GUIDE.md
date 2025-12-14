@@ -37,7 +37,7 @@ Le pipeline a besoin de se connecter à votre serveur DigitalOcean. Pour cela, n
 |---------------|-----------------|
 | `DO_HOST` | L'adresse IP de votre Droplet (ex: `164.x.x.x`) |
 | `DO_USER` | `root` (ou votre user sudo) |
-| `DO_KEY` | Le contenu de votre clé privée SSH (`id_rsa`).<br>⚠️ Copiez TOUT le fichier, de `-----BEGIN...` à `...END-----`. |
+| `DO_PASSWORD` | Votre mot de passe de connexion au serveur |
 
 > **Note** : Vous n'avez PAS besoin de créer `GITHUB_TOKEN`, il est géré automatiquement.
 
