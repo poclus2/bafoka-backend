@@ -32,7 +32,7 @@ class BlockchainService {
     const BAD_ADDRESSES = [
       '0xf710a9d413bed1e0c600f099081bc441106e03bd', // Empty address
       '0xf710a9d413bed1e0c600f099081bc441106e03bdd', // Typo 43 chars
-      '0xAc756C73C981D0F55226570fE8c8C44498D45585'  // Previous deploy (empty code?)
+      '0xac756c73c981d0f55226570fe8c8c44498d45585'  // Previous deploy (empty code)
     ];
 
     // RESCUE MODE: Si l'adresse est mauvaise ou vide, on force la nouvelle adresse valide déployée
@@ -46,6 +46,7 @@ class BlockchainService {
       TOKEN_ABI,
       this.provider
     );
+
 
     // Wallet administrateur (si clé privée fournie)
     this.adminWallet = null;
@@ -602,8 +603,8 @@ class BlockchainService {
       const privateKey = phoneWalletService.derivePrivateKeyFromPhone(fromPhoneNumber, fromPin);
       const senderWallet = new ethers.Wallet(privateKey, this.provider);
 
-      // 6. Se connecter au contrat token
-      const tokenContract = new ethers.Contract(config.tokenContractAddress, TOKEN_ABI, senderWallet);
+      // 6. Se connecter au contrat token (utilisation de l'adresse validée/rescuée du service)
+      const tokenContract = new ethers.Contract(this.tokenContract.target, TOKEN_ABI, senderWallet);
 
       // 7. Convertir le montant en wei (18 decimals pour les tokens ERC20 standard)
       const amountInWei = ethers.parseUnits(amount.toString(), 18);
