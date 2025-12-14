@@ -68,7 +68,7 @@ jobs:
             docker run -d \
               --name bafoka-dao-backend \
               --restart unless-stopped \
-              -p 3001:3001 \
+              -p 80:3001 \
               --env-file /root/bafoka-backend/.env.production \
               ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             
