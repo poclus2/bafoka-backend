@@ -12,9 +12,10 @@ class BlockchainService {
 
     this.provider = new ethers.JsonRpcProvider(config.celoRpcUrl, network, { staticNetwork: network });
 
-    // Initialisation du contrat Token avec adresse checksummed
+    // Initialisation du contrat Token avec normalisation de l'adresse (safe casing)
+    const sanitizedTokenAddress = config.tokenContractAddress ? String(config.tokenContractAddress).toLowerCase() : ethers.ZeroAddress;
     this.tokenContract = new ethers.Contract(
-      ethers.getAddress(config.tokenContractAddress),
+      ethers.getAddress(sanitizedTokenAddress),
       TOKEN_ABI,
       this.provider
     );
