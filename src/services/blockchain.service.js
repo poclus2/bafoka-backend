@@ -31,13 +31,14 @@ class BlockchainService {
     // BAD ADDRESS LIST (Adresses connues pour être vides ou problématiques)
     const BAD_ADDRESSES = [
       '0xf710a9d413bed1e0c600f099081bc441106e03bd', // Empty address
-      '0xf710a9d413bed1e0c600f099081bc441106e03bdd' // Typo 43 chars
+      '0xf710a9d413bed1e0c600f099081bc441106e03bdd', // Typo 43 chars
+      '0xAc756C73C981D0F55226570fE8c8C44498D45585'  // Previous deploy (empty code?)
     ];
 
     // RESCUE MODE: Si l'adresse est mauvaise ou vide, on force la nouvelle adresse valide déployée
     if (!rawAddress || rawAddress === ethers.ZeroAddress || BAD_ADDRESSES.includes(rawAddress) || rawAddress.length === 43) {
       console.warn(`🚨 RESCUE MODE: Adresse Token invalide '${rawAddress}' détectée. Bascule forcée sur le nouveau déploiement.`);
-      rawAddress = '0xAc756C73C981D0F55226570fE8c8C44498D45585';
+      rawAddress = '0xAEA24F4C64c515bd5744C9fba01BB38CcF02Ee43';
     }
 
     this.tokenContract = new ethers.Contract(
