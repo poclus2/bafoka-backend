@@ -155,8 +155,8 @@ class BlockchainService {
       console.log(`🔍 Récupération des transactions de ${address}`);
       console.log(`📊 Strategie: Scan inversé ${normalizedToBlock} -> ${scanMinBlock} (Deployment: ${deploymentBlock})`);
 
-      const CHUNK_SIZE = 50000; // Augmentation x10 du chunk (moins d'appels queryFilter)
-      const MAX_CONCURRENT_REQUESTS = 15; // Augmentation x3 du parallélisme
+      const CHUNK_SIZE = 10000; // Tentative d'optimisation (10k)
+      const MAX_CONCURRENT_REQUESTS = 20; // Augmenter encore la concurr pour compenser
 
       let allAttributes = [];
       let currentTo = normalizedToBlock;
@@ -233,7 +233,10 @@ class BlockchainService {
                     },
                     type: event.args.from.toLowerCase() === address.toLowerCase() ? 'sent' : 'received'
                   };
-                } catch (e) { return null; }
+                } catch (e) {
+                  // Silently ignore failed block fetches to avoid crashing the whole batch
+                  return null;
+                }
               });
 
               const chunkTransactions = (await Promise.all(txPromises)).filter(tx => tx !== null);
