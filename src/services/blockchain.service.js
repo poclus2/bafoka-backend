@@ -118,126 +118,116 @@ class BlockchainService {
    * Récupère les transactions d'une adresse pour le token
    * Utilise les événements Transfer du contrat avec chunking pour les RPC limités
    */
-  async getTokenTransactions(address, fromBlock = 0, toBlock = 'latest') {
+  /**
+   * Récupère les transactions d'une adresse pour le token (Scan inversé intelligent)
+   * Scanne depuis le bloc le plus récent vers le passé pour optimiser les performances
+   * et contourner les limites RPC, en s'arrêtant dès qu'on a assez de transactions.
+   */
+  async getTokenTransactions(address, fromBlock = 0, toBlock = 'latest', limit = 10) {
     try {
-      // Obtenir le dernier bloc si toBlock est 'latest'
+      // 1. Détermination du bloc de fin (le plus récent)
       let normalizedToBlock = toBlock;
       if (toBlock === 'latest') {
         normalizedToBlock = await this.provider.getBlockNumber();
-      } else if (typeof toBlock === 'string' && toBlock !== 'earliest' && toBlock !== 'pending') {
-        const parsed = parseInt(toBlock, 10);
-        if (!isNaN(parsed)) {
-          normalizedToBlock = parsed;
-        }
+      } else if (typeof toBlock === 'string') {
+        normalizedToBlock = parseInt(toBlock, 10);
       }
 
-      // Normaliser fromBlock
+      // 2. Détermination du bloc de début (le plus ancien)
       let normalizedFromBlock = fromBlock;
-      if (typeof fromBlock === 'string' && fromBlock !== 'latest' && fromBlock !== 'earliest' && fromBlock !== 'pending') {
-        const parsed = parseInt(fromBlock, 10);
-        if (!isNaN(parsed)) {
-          normalizedFromBlock = parsed;
-        }
+      if (typeof fromBlock === 'string' && fromBlock !== 'earliest') {
+        normalizedFromBlock = parseInt(fromBlock, 10);
       }
-
-      // Limiter la portée pour les RPC gratuits
-      const MAX_BLOCK_RANGE = 9000; // Un peu en dessous de 10000 pour être sûr
-      const blockRange = normalizedToBlock - normalizedFromBlock;
+      if (isNaN(normalizedFromBlock)) normalizedFromBlock = 0;
+      if (isNaN(normalizedToBlock)) normalizedToBlock = await this.provider.getBlockNumber();
 
       console.log(`🔍 Récupération des transactions de ${address}`);
-      console.log(`📊 Range: ${normalizedFromBlock} -> ${normalizedToBlock} (${blockRange} blocs)`);
+      console.log(`📊 Strategie: Scan inversé ${normalizedToBlock} -> ${normalizedFromBlock}`);
 
-      // Si la portée est trop grande, on limite aux derniers blocs
-      // if (blockRange > MAX_BLOCK_RANGE) {
-      //   const adjustedFromBlock = Math.max(normalizedToBlock - MAX_BLOCK_RANGE, normalizedFromBlock);
-      //   console.log(`⚠️  Portée trop large, limitation aux ${MAX_BLOCK_RANGE} derniers blocs`);
-      //   console.log(`📊 Range ajustée: ${adjustedFromBlock} -> ${normalizedToBlock}`);
-      //   normalizedFromBlock = adjustedFromBlock;
-      // }
+      const CHUNK_SIZE = 5000; // Taille safe pour la plupart des RPC (même limités)
+      let allAttributes = [];
+      let currentTo = normalizedToBlock;
 
-      // Filtres pour les événements Transfer
+      // Filtres pour les événements
       const sentFilter = this.tokenContract.filters.Transfer(address, null);
       const receivedFilter = this.tokenContract.filters.Transfer(null, address);
 
-      console.log(`🔄 Requête des événements Transfer...`);
+      // 3. Boucle de scan inversé
+      while (currentTo > normalizedFromBlock && allAttributes.length < limit) {
+        const currentFrom = Math.max(normalizedFromBlock, currentTo - CHUNK_SIZE);
+        console.log(`   🔄 Scan bloc ${currentFrom} à ${currentTo}...`);
 
-      // Récupération des événements avec gestion d'erreur
-      let sentEvents = [];
-      let receivedEvents = [];
-
-      try {
-        [sentEvents, receivedEvents] = await Promise.all([
-          this.tokenContract.queryFilter(sentFilter, normalizedFromBlock, normalizedToBlock),
-          this.tokenContract.queryFilter(receivedFilter, normalizedFromBlock, normalizedToBlock)
-        ]);
-      } catch (error) {
-        // Si l'erreur persiste même avec la limitation, essayer une portée encore plus petite
-        if (error.message.includes('ranges over') || error.message.includes('10000 blocks')) {
-          console.log(`⚠️  Erreur de portée persistante, réduction à 5000 blocs`);
-          const smallerRange = 5000;
-          const veryAdjustedFromBlock = Math.max(normalizedToBlock - smallerRange, normalizedFromBlock);
-
-          [sentEvents, receivedEvents] = await Promise.all([
-            this.tokenContract.queryFilter(sentFilter, veryAdjustedFromBlock, normalizedToBlock),
-            this.tokenContract.queryFilter(receivedFilter, veryAdjustedFromBlock, normalizedToBlock)
+        try {
+          // Requêtes parallèles pour ce chunk
+          const [sentEvents, receivedEvents] = await Promise.all([
+            this.tokenContract.queryFilter(sentFilter, currentFrom, currentTo),
+            this.tokenContract.queryFilter(receivedFilter, currentFrom, currentTo)
           ]);
 
-          console.log(`✅ Récupération réussie avec portée réduite: ${veryAdjustedFromBlock} -> ${normalizedToBlock}`);
-        } else {
-          throw error;
+          const chunkEvents = [...sentEvents, ...receivedEvents];
+
+          if (chunkEvents.length > 0) {
+            // Traitement immédiat des événements trouvés
+            const chunkTransactions = await Promise.all(
+              chunkEvents.map(async (event) => {
+                const block = await event.getBlock();
+                const decimals = await this.tokenContract.decimals();
+                return {
+                  hash: event.transactionHash,
+                  blockNumber: event.blockNumber,
+                  timestamp: block.timestamp,
+                  from: event.args.from,
+                  to: event.args.to,
+                  value: {
+                    raw: event.args.value.toString(),
+                    formatted: ethers.formatUnits(event.args.value, decimals)
+                  },
+                  type: event.args.from.toLowerCase() === address.toLowerCase() ? 'sent' : 'received'
+                };
+              })
+            );
+
+            // Ajout aux résultats globlaux
+            allAttributes.push(...chunkTransactions);
+
+            // Tri temporaire pour potentiellement s'arrêter si on a assez de tx RECENTES
+            // (Note: on continue de scanner tant qu'on n'a pas atteint la limite OU le bloc 0)
+          }
+
+        } catch (error) {
+          console.warn(`⚠️ Erreur sur le chunk ${currentFrom}-${currentTo}: ${error.message}`);
+          // On continue, un chunk raté ne doit pas bloquer tout le processus
+        }
+
+        currentTo = currentFrom - 1; // Déplace la fenêtre vers le passé
+
+        // Pause pour éviter rate limit si on fait beaucoup de requêtes
+        if (allAttributes.length < limit) {
+          await new Promise(r => setTimeout(r, 100));
         }
       }
 
-      // Combinaison et tri des transactions
-      const allEvents = [...sentEvents, ...receivedEvents];
-      console.log(`📝 ${allEvents.length} événements trouvés`);
+      // 4. Tri final et slice
+      // On veut les plus récentes en premier
+      allAttributes.sort((a, b) => b.blockNumber - a.blockNumber);
 
-      // Récupération des détails de chaque transaction
-      const transactions = await Promise.all(
-        allEvents.map(async (event) => {
-          const block = await event.getBlock();
-          const decimals = await this.tokenContract.decimals();
+      // On garde uniquement les 'limit' premières
+      const finalTransactions = allAttributes.slice(0, limit);
 
-          return {
-            hash: event.transactionHash,
-            blockNumber: event.blockNumber,
-            timestamp: block.timestamp,
-            from: event.args.from,
-            to: event.args.to,
-            value: {
-              raw: event.args.value.toString(),
-              formatted: ethers.formatUnits(event.args.value, decimals)
-            },
-            type: event.args.from.toLowerCase() === address.toLowerCase() ? 'sent' : 'received'
-          };
-        })
-      );
+      console.log(`✅ ${finalTransactions.length} transactions récupérées (Scan arrêté à ${currentTo})`);
 
-      // Tri par numéro de bloc décroissant (plus récent en premier)
-      transactions.sort((a, b) => b.blockNumber - a.blockNumber);
-
-      const result = {
+      return {
         address,
         contractAddress: config.tokenContractAddress,
-        totalTransactions: transactions.length,
-        transactions,
-        // Informations de debug pour aider l'utilisateur
+        totalTransactions: finalTransactions.length, // C'est le nombre RETOURNÉ, pas total absolu sur la chaine
+        transactions: finalTransactions,
         _debug: {
-          requestedRange: {
-            from: fromBlock,
-            to: toBlock
-          },
-          actualRange: {
-            from: normalizedFromBlock,
-            to: normalizedToBlock,
-            blocks: normalizedToBlock - normalizedFromBlock
-          },
-          limitApplied: blockRange > MAX_BLOCK_RANGE
+          strategy: 'reverse_chunk_scan',
+          scannedRange: `${normalizedToBlock} -> ${currentTo}`,
+          limit: limit
         }
       };
 
-      console.log(`✅ ${transactions.length} transactions récupérées avec succès`);
-      return result;
     } catch (error) {
       throw new Error(`Erreur lors de la récupération des transactions: ${error.message}`);
     }

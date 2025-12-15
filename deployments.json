@@ -3,7 +3,7 @@
   "network": "celosepolia",
   "contracts": {
     "Token": {
-      "address": "0xD27Da63615C3AC9cc91491C8e23A8C3Eb4f240EC",
+      "address": "0xAEA24F4C64c515bd5744C9fba01BB38CcF02Ee43",
       "deploymentBlock": 10887976,
       "deploymentTimestamp": 1764171970,
       "transactionHash": "0xc6605ffb2c4b0f4579eb4d97ffb763367132ecd11b1963b429a6da153e81152d",
@@ -18,7 +18,7 @@
       "transactionHash": "0x28a82b794ed4a0644b8c0a0d1843b500123248fe9f7f761592276fb42f46b50b",
       "deployer": "0xadA758c4561233bE28daf54BEaC161750EF1C73e",
       "gasUsed": "1573679",
-      "tokenAddress": "0xD27Da63615C3AC9cc91491C8e23A8C3Eb4f240EC",
+      "tokenAddress": "0xAEA24F4C64c515bd5744C9fba01BB38CcF02Ee43",
       "lastUpdated": "2025-11-26T15:46:18.850Z"
     },
     "GovernanceDAO": {
