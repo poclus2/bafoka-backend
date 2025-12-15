@@ -155,15 +155,18 @@ class BlockchainService {
       console.log(`🔍 Récupération des transactions de ${address}`);
       console.log(`📊 Strategie: Scan inversé ${normalizedToBlock} -> ${scanMinBlock} (Deployment: ${deploymentBlock})`);
 
-      const CHUNK_SIZE = 5000;
-      // AVEC BATCHING DÉSACTIVÉ DANS LE PROVIDER, ON PEUT PARALLÉLISER !
-      const MAX_CONCURRENT_REQUESTS = 5;
+      const CHUNK_SIZE = 50000; // Augmentation x10 du chunk (moins d'appels queryFilter)
+      const MAX_CONCURRENT_REQUESTS = 15; // Augmentation x3 du parallélisme
+
       let allAttributes = [];
       let currentTo = normalizedToBlock;
 
       // Filtres pour les événements
       const sentFilter = this.tokenContract.filters.Transfer(address, null);
       const receivedFilter = this.tokenContract.filters.Transfer(null, address);
+
+      // Cache de bloc local pour éviter de re-fetcher le même timestamp 10x
+      const blockCache = new Map();
 
       // 3. Boucle de scan inversé avec BATCHING PARALLÈLE
       while (currentTo > scanMinBlock && allAttributes.length < limit) {
@@ -178,7 +181,6 @@ class BlockchainService {
           const currentFrom = Math.max(scanMinBlock, currentTo - CHUNK_SIZE);
           batchRanges.push({ from: currentFrom, to: currentTo });
 
-          // On peut maintenant faire Promise.all car ce sont des requêtes HTTP distinctes
           const promise = Promise.all([
             this.tokenContract.queryFilter(sentFilter, currentFrom, currentTo),
             this.tokenContract.queryFilter(receivedFilter, currentFrom, currentTo)
@@ -199,7 +201,7 @@ class BlockchainService {
 
         if (batchPromises.length === 0) break;
 
-        console.log(`   🚀 Scan Batch Rapide: ${batchRanges[0].to} -> ${batchRanges[batchRanges.length - 1].from} (${batchPromises.length} chunks)`);
+        console.log(`   ⚡ Scan ULTRA-Rapide: ${batchRanges[0].to} -> ${batchRanges[batchRanges.length - 1].from} (${batchPromises.length} chunks)`);
 
         try {
           const batchResults = await Promise.all(batchPromises);
@@ -210,10 +212,15 @@ class BlockchainService {
             if (res.events.length > 0) {
               const decimals = await this.tokenContract.decimals();
 
-              // PARALLÉLISME SUR LES BLOCS (Grâce au provider no-batching)
+              // PARALLÉLISME SUR LES BLOCS + CACHE
               const txPromises = res.events.map(async (event) => {
                 try {
-                  const block = await event.getBlock(); // Appel parallèle possible !
+                  let block = blockCache.get(event.blockNumber);
+                  if (!block) {
+                    block = await event.getBlock();
+                    blockCache.set(event.blockNumber, block);
+                  }
+
                   return {
                     hash: event.transactionHash,
                     blockNumber: event.blockNumber,
