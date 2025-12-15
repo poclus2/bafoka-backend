@@ -166,13 +166,18 @@ class BlockchainService {
 
           const chunkEvents = [...sentEvents, ...receivedEvents];
 
+
           if (chunkEvents.length > 0) {
-            // Traitement immédiat des événements trouvés
-            const chunkTransactions = await Promise.all(
-              chunkEvents.map(async (event) => {
+            // 1. Optimisation: Fetch decimals une seule fois
+            const decimals = await this.tokenContract.decimals();
+
+            // 2. Traitement des événements (SÉQUENTIEL pour éviter "Batch too large" sur RPC gratuit)
+            // Promise.all déclencherait trop de requêtes simultanées (getBlock)
+            const chunkTransactions = [];
+            for (const event of chunkEvents) {
+              try {
                 const block = await event.getBlock();
-                const decimals = await this.tokenContract.decimals();
-                return {
+                chunkTransactions.push({
                   hash: event.transactionHash,
                   blockNumber: event.blockNumber,
                   timestamp: block.timestamp,
@@ -183,9 +188,11 @@ class BlockchainService {
                     formatted: ethers.formatUnits(event.args.value, decimals)
                   },
                   type: event.args.from.toLowerCase() === address.toLowerCase() ? 'sent' : 'received'
-                };
-              })
-            );
+                });
+              } catch (evError) {
+                console.warn(`⚠️ Erreur lecture bloc ${event.blockNumber}: ${evError.message}`);
+              }
+            }
 
             // Ajout aux résultats globlaux
             allAttributes.push(...chunkTransactions);
