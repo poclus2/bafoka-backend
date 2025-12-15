@@ -133,18 +133,26 @@ class BlockchainService {
         normalizedToBlock = parseInt(toBlock, 10);
       }
 
+
       // 2. Détermination du bloc de début (le plus ancien)
       let normalizedFromBlock = fromBlock;
       if (typeof fromBlock === 'string' && fromBlock !== 'earliest') {
         normalizedFromBlock = parseInt(fromBlock, 10);
       }
       if (isNaN(normalizedFromBlock)) normalizedFromBlock = 0;
+
+      // OPTIMISATION CRITIQUE: Ne jamais scanner avant le déploiement du contrat
+      // Cela évite de scanner des millions de blocs vides pour des vieux wallets
+      const deploymentBlock = config.tokenDeploymentBlock || 0;
+      const scanMinBlock = Math.max(normalizedFromBlock, deploymentBlock);
+
       if (isNaN(normalizedToBlock)) normalizedToBlock = await this.provider.getBlockNumber();
 
       console.log(`🔍 Récupération des transactions de ${address}`);
-      console.log(`📊 Strategie: Scan inversé ${normalizedToBlock} -> ${normalizedFromBlock}`);
+      console.log(`📊 Strategie: Scan inversé ${normalizedToBlock} -> ${scanMinBlock} (Deployment: ${deploymentBlock})`);
 
-      const CHUNK_SIZE = 5000; // Taille safe pour la plupart des RPC (même limités)
+      const CHUNK_SIZE = 5000;
+      const MAX_CONCURRENT_REQUESTS = 1; // RPC Limit: 3 reqs max. We do 2 reqs per chunk (Sent+Recv), so max batch is 1.
       let allAttributes = [];
       let currentTo = normalizedToBlock;
 
@@ -152,66 +160,89 @@ class BlockchainService {
       const sentFilter = this.tokenContract.filters.Transfer(address, null);
       const receivedFilter = this.tokenContract.filters.Transfer(null, address);
 
-      // 3. Boucle de scan inversé
-      while (currentTo > normalizedFromBlock && allAttributes.length < limit) {
-        const currentFrom = Math.max(normalizedFromBlock, currentTo - CHUNK_SIZE);
-        console.log(`   🔄 Scan bloc ${currentFrom} à ${currentTo}...`);
+      // 3. Boucle de scan inversé avec BATCHING
+      while (currentTo > scanMinBlock && allAttributes.length < limit) {
 
-        try {
-          // Requêtes parallèles pour ce chunk
-          const [sentEvents, receivedEvents] = await Promise.all([
+        // Préparer un batch de chunks à scanner en parallèle
+        const batchPromises = [];
+        const batchRanges = [];
+
+        for (let i = 0; i < MAX_CONCURRENT_REQUESTS; i++) {
+          if (currentTo <= scanMinBlock) break; // Stop si on atteint la fin
+
+          const currentFrom = Math.max(scanMinBlock, currentTo - CHUNK_SIZE);
+          batchRanges.push({ from: currentFrom, to: currentTo });
+
+          // Lancer les requêtes pour ce chunk
+          const promise = Promise.all([
             this.tokenContract.queryFilter(sentFilter, currentFrom, currentTo),
             this.tokenContract.queryFilter(receivedFilter, currentFrom, currentTo)
-          ]);
+          ]).then(([sent, received]) => ({
+            from: currentFrom,
+            to: currentTo,
+            events: [...sent, ...received]
+          })).catch(err => ({
+            from: currentFrom,
+            to: currentTo,
+            error: err,
+            events: []
+          }));
 
-          const chunkEvents = [...sentEvents, ...receivedEvents];
+          batchPromises.push(promise);
 
+          // Décaler la fenêtre pour le prochain chunk du batch
+          currentTo = currentFrom - 1;
+        }
 
-          if (chunkEvents.length > 0) {
-            // 1. Optimisation: Fetch decimals une seule fois
-            const decimals = await this.tokenContract.decimals();
+        if (batchPromises.length === 0) break;
 
-            // 2. Traitement des événements (SÉQUENTIEL pour éviter "Batch too large" sur RPC gratuit)
-            // Promise.all déclencherait trop de requêtes simultanées (getBlock)
-            const chunkTransactions = [];
-            for (const event of chunkEvents) {
-              try {
-                const block = await event.getBlock();
-                chunkTransactions.push({
-                  hash: event.transactionHash,
-                  blockNumber: event.blockNumber,
-                  timestamp: block.timestamp,
-                  from: event.args.from,
-                  to: event.args.to,
-                  value: {
-                    raw: event.args.value.toString(),
-                    formatted: ethers.formatUnits(event.args.value, decimals)
-                  },
-                  type: event.args.from.toLowerCase() === address.toLowerCase() ? 'sent' : 'received'
-                });
-              } catch (evError) {
-                console.warn(`⚠️ Erreur lecture bloc ${event.blockNumber}: ${evError.message}`);
-              }
+        console.log(`   🔄 Scan Batch: ${batchRanges[0].to} -> ${batchRanges[batchRanges.length - 1].from} (${batchPromises.length} chunks parallèles)`);
+
+        try {
+          // Attendre tout le batch
+          const batchResults = await Promise.all(batchPromises);
+
+          // Traiter les résultats (dans l'ordre pour cohérence, même si on trie à la fin)
+          for (const res of batchResults) {
+            if (res.error) {
+              console.warn(`⚠️ Erreur chunk ${res.from}-${res.to}: ${res.error.message}`);
+              continue;
             }
 
-            // Ajout aux résultats globlaux
-            allAttributes.push(...chunkTransactions);
+            if (res.events.length > 0) {
+              // Optimisation: Fetch decimals une seule fois
+              const decimals = await this.tokenContract.decimals();
 
-            // Tri temporaire pour potentiellement s'arrêter si on a assez de tx RECENTES
-            // (Note: on continue de scanner tant qu'on n'a pas atteint la limite OU le bloc 0)
+              // Traitement séquentiel des blocs pour ce chunk (éviter RPC limit)
+              const chunkTransactions = [];
+              for (const event of res.events) {
+                try {
+                  const block = await event.getBlock();
+                  chunkTransactions.push({
+                    hash: event.transactionHash,
+                    blockNumber: event.blockNumber,
+                    timestamp: block.timestamp,
+                    from: event.args.from,
+                    to: event.args.to,
+                    value: {
+                      raw: event.args.value.toString(),
+                      formatted: ethers.formatUnits(event.args.value, decimals)
+                    },
+                    type: event.args.from.toLowerCase() === address.toLowerCase() ? 'sent' : 'received'
+                  });
+                } catch (evError) {
+                  console.warn(`⚠️ Erreur lecture bloc ${event.blockNumber}: ${evError.message}`);
+                }
+              }
+              allAttributes.push(...chunkTransactions);
+            }
           }
 
         } catch (error) {
-          console.warn(`⚠️ Erreur sur le chunk ${currentFrom}-${currentTo}: ${error.message}`);
-          // On continue, un chunk raté ne doit pas bloquer tout le processus
+          console.warn(`⚠️ Erreur batch global: ${error.message}`);
         }
 
-        currentTo = currentFrom - 1; // Déplace la fenêtre vers le passé
-
-        // Pause pour éviter rate limit si on fait beaucoup de requêtes
-        if (allAttributes.length < limit) {
-          await new Promise(r => setTimeout(r, 100));
-        }
+        // Pause légère entre les batchs si nécessaire ? Non, on profite du parallélisme.
       }
 
       // 4. Tri final et slice

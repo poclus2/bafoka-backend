@@ -20,6 +20,7 @@ export const config = {
 
   // Adresses des contrats (depuis deployments.json avec fallback sur .env)
   tokenContractAddress: tokenContract.address || process.env.TOKEN_CONTRACT_ADDRESS || '0xD27Da63615C3AC9cc91491C8e23A8C3Eb4f240EC',
+  tokenDeploymentBlock: tokenContract.deploymentBlock || 0, // Optimisation: Bloc de départ pour le scan
   daoContractAddress: daoContract.address || process.env.DAO_CONTRACT_ADDRESS || '0xF57e75a597B85239F1125c30f6F5ec4896D66A68',
   governanceContractAddress: governanceContract.address || process.env.GOVERNANCE_CONTRACT_ADDRESS || '',
 
