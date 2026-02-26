@@ -1,0 +1,46 @@
+version: '3.8'
+
+# ============================================
+# docker-compose.prod.yml — Surcharge Production
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# ============================================
+
+services:
+  backend:
+    # En production, on utilise l'image pré-construite depuis GHCR
+    # au lieu de reconstruire localement
+    image: ghcr.io/${GITHUB_REPOSITORY:-harestech/bafoka-backend}:latest
+    restart: always
+
+    # Logging JSON structuré avec rotation automatique
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        labels: "service=bafoka-backend"
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 768M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      # Restart policy granulaire
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+  nginx:
+    # Désactiver le build local, utiliser l'image officielle fixée
+    image: nginx:1.25-alpine
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"

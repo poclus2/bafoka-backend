@@ -4,25 +4,29 @@
 # ============================================
 
 # ---- Stage 1: Builder ----
-FROM node:18-alpine AS builder
+# Node 20 LTS = support garanti jusqu'en avril 2026
+FROM node:20-alpine AS builder
 
 LABEL maintainer="Bafoka DAO Team"
 LABEL description="Token Gated DAO Backend API"
 
-# Définir le répertoire de travail
 WORKDIR /app
 
-# Copier les fichiers de dépendances
+# Copier les fichiers de dépendances EN PREMIER (cache Docker optimal)
 COPY package*.json ./
 
-# Installer les dépendances (production uniquement)
-RUN npm install --production && \
+# npm ci = installation STRICTEMENT reproductible depuis package-lock.json
+# Beaucoup plus rapide et fiable que npm install en CI/CD
+RUN npm ci --only=production && \
     npm cache clean --force
 
 # ---- Stage 2: Production ----
-FROM node:18-alpine
+FROM node:20-alpine
 
-# Créer un utilisateur non-root pour la sécurité
+# curl pour le healthcheck (plus fiable que Node seul)
+RUN apk add --no-cache curl
+
+# Utilisateur non-root pour la sécurité
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
@@ -31,22 +35,20 @@ WORKDIR /app
 # Copier les dépendances depuis builder
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 
-# Copier le code source
-COPY --chown=nodejs:nodejs . .
+# Copier uniquement le code source (pas les fichiers dev)
+COPY --chown=nodejs:nodejs src/ ./src/
+COPY --chown=nodejs:nodejs package*.json ./
 
 # Exposer le port
 EXPOSE 3001
 
-# Variables d'environnement par défaut
 ENV NODE_ENV=production \
     PORT=3001
 
-# Passer à l'utilisateur non-root
 USER nodejs
 
-# Health check
+# Health check via curl (beaucoup plus léger que Node)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:3001/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+    CMD curl -fs http://localhost:3001/api/health || exit 1
 
-# Démarrer l'application
 CMD ["node", "src/server.js"]
