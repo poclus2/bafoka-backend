@@ -15,19 +15,18 @@
 
 1. [Fonctionnalités](#-fonctionnalités)
 2. [Architecture du projet](#-architecture-du-projet)
-3. [🛠️ Tutoriel — Déploiement Backend](#️-tutoriel--déploiement-backend)
-   - [Prérequis](#prérequis)
-   - [Déploiement local (développement)](#déploiement-local-développement)
-   - [Déploiement Docker (recommandé)](#déploiement-docker-recommandé)
-   - [Déploiement production (DigitalOcean)](#déploiement-production-digitalocean)
-   - [CI/CD automatique (GitHub Actions)](#cicd-automatique-github-actions)
-4. [⛓️ Tutoriel — Déploiement des Smart Contracts](#️-tutoriel--déploiement-des-smart-contracts)
+3. [⛓️ Tutoriel — Déploiement des Smart Contracts](#️-tutoriel--déploiement-des-smart-contracts) *(faire en premier)*
    - [Présentation des contrats](#présentation-des-contrats)
    - [Prérequis Hardhat](#prérequis-hardhat)
    - [Configurer le wallet de déploiement](#configurer-le-wallet-de-déploiement)
    - [Déploiement complet (Token + DAO + Gouvernance)](#déploiement-complet-token--dao--gouvernance)
    - [Vérifier le déploiement](#vérifier-le-déploiement)
-   - [Mettre à jour le backend](#mettre-à-jour-le-backend)
+4. [🛠️ Tutoriel — Déploiement Backend](#️-tutoriel--déploiement-backend) *(faire après les contrats)*
+   - [Prérequis](#prérequis)
+   - [Déploiement local (développement)](#déploiement-local-développement)
+   - [Déploiement Docker (recommandé)](#déploiement-docker-recommandé)
+   - [Déploiement production (DigitalOcean)](#déploiement-production-digitalocean)
+   - [CI/CD automatique (GitHub Actions)](#cicd-automatique-github-actions)
 5. [📖 Tutoriel — Utilisation de l'API](#-tutoriel--utilisation-de-lapi)
    - [Health Check](#health-check)
    - [Gestion des comptes](#gestion-des-comptes)
@@ -99,7 +98,174 @@ backend/
 
 ---
 
-## 🛠️ Tutoriel — Déploiement
+## ⛓️ Tutoriel — Déploiement des Smart Contracts
+
+> [!IMPORTANT]
+> **Commencez toujours ici.** Les adresses des contrats déployés (Token, DAO, Governance) sont nécessaires pour configurer le backend. Sans elles, le backend ne peut pas se connecter à la blockchain.
+
+Cette section couvre le déploiement depuis zéro des 3 contrats Solidity qui alimentent le backend.
+
+### Présentation des contrats
+
+| Contrat | Fichier | Rôle |
+|---|---|---|
+| **Token** | `Token.sol` | Token ERC-20 BFK — monnaie de la DAO |
+| **TokenGatedDao** | `TokenGatedDao.sol` | Registre des membres et droits d'accès |
+| **GovernanceDAO** | `GovernanceDAO.sol` | Cycle complet des propositions et votes |
+
+Les 3 contrats sont déployés en une seule commande via le script unifié `deploy-complete.js`.
+
+---
+
+### Prérequis Hardhat
+
+#### Outils nécessaires
+
+```bash
+# Node.js v20 LTS requis
+node --version  # → v20.x.x
+
+# Yarn (gestionnaire de paquets du sous-projet Hardhat)
+npm install -g yarn
+```
+
+#### Installer les dépendances Hardhat
+
+```bash
+# Se placer dans le sous-dossier hardhat
+cd hardhat
+
+yarn install
+```
+
+---
+
+### Configurer le wallet de déploiement
+
+#### Étape 1 — Créer un wallet dédié au déploiement
+
+> ⚠️ Ne jamais utiliser votre wallet personnel pour déployer des contrats. Créez-en un dédié.
+
+Utilisez la tâche Hardhat intégrée :
+
+```bash
+npx hardhat create-account
+```
+
+Sortie :
+```
+PRIVATE_KEY="0xabc123..."
+
+Your account address: 0x4A5b6C7dXXXXXXXX
+```
+
+#### Étape 2 — Alimenter le wallet en CELO
+
+Pour déployer sur **Celo Sepolia (testnet)**, obtenez des CELO de test gratuits :
+1. Rendez-vous sur **[faucet.celo.org](https://faucet.celo.org)**
+2. Choisissez le réseau **Celo Sepolia**
+3. Collez l'adresse de votre wallet de déploiement
+4. Cliquez sur **Faucet**
+
+> Vous aurez besoin d'au moins **0.1 CELO** pour les 3 déploiements.
+
+Pour le **Mainnet Celo**, achetez du CELO sur un exchange (Coinbase, Binance) et transférez-le vers l'adresse de déploiement.
+
+#### Étape 3 — Créer le fichier de configuration Hardhat
+
+```bash
+# Dans le dossier hardhat/
+cp .envexample .env
+nano .env
+```
+
+Contenu du fichier `hardhat/.env` :
+
+```env
+# Clé privée du wallet de déploiement (SANS le préfixe 0x)
+PRIVATE_KEY=votre_cle_privee_ici_sans_0x
+```
+
+> ⚠️ Ce fichier est dans `.gitignore`. Ne le commitez jamais.
+
+---
+
+### Déploiement complet (Token + DAO + Gouvernance)
+
+#### Vérifier la connexion au réseau
+
+```bash
+# Dans hardhat/
+npx hardhat accounts --network celosepolia
+
+# Vérifier le solde
+npx hardhat run scripts/check-gas.js --network celosepolia
+```
+
+#### Lancer le déploiement
+
+```bash
+npx hardhat run scripts/deploy-complete.js --network celosepolia
+```
+
+Sortie attendue :
+```
+🚀 DÉMARRAGE DU DÉPLOIEMENT COMPLET sur celosepolia
+===================================================
+📝 Compte de déploiement: 0x4A5b6C7dXXXXXXXX
+💰 Solde: 0.25 CELO
+
+📄 [1/3] Déploiement du contrat TOKEN...
+✅ Token déployé: 0xAAAA...1111
+
+🏛️  [2/3] Déploiement du contrat TokenGatedDao...
+✅ TokenGatedDao déployé: 0xBBBB...2222
+
+⚖️  [3/3] Déploiement du contrat GovernanceDAO...
+✅ GovernanceDAO déployé: 0xCCCC...3333
+
+👑 Configuration des rôles...
+   • Rôle MODERATOR attribué à l'admin
+   • Rôle VALIDATOR attribué à l'admin
+
+📝 Mise à jour des fichiers de configuration...
+✅ hardhat/.env mis à jour
+✅ backend/.env mis à jour  ← les adresses sont injectées automatiquement !
+
+🎉 DÉPLOIEMENT TERMINÉ AVEC SUCCÈS !
+===================================================
+📍 Token:      0xAAAA...1111
+📍 DAO:        0xBBBB...2222
+📍 Governance: 0xCCCC...3333
+===================================================
+
+👉 Prochaines étapes :
+1. Redémarrez le backend (npm run dev)
+2. Testez l'API (curl http://localhost:3001/api/health)
+```
+
+> 💡 Le script met **automatiquement à jour** `backend/.env` avec les nouvelles adresses et le numéro de bloc de déploiement. Pas besoin de copier-coller manuellement.
+
+---
+
+### Vérifier le déploiement
+
+```bash
+# Test de connexion complet (Token + Governance)
+npx hardhat run scripts/test-governance-connection.js --network celosepolia
+
+# Vérifier les soldes
+npx hardhat run scripts/check_balance_multi.js --network celosepolia
+```
+
+Vos contrats sont publiquement vérifiables sur **[celoscan.io](https://celoscan.io)** — collez l'adresse d'un contrat pour voir son code source et ses transactions.
+
+---
+
+## 🛠️ Tutoriel — Déploiement Backend
+
+> [!NOTE]
+> **Prérequis** : Avoir déjà déployé les smart contracts (section précédente). Le script `deploy-complete.js` met à jour automatiquement votre `backend/.env` avec les adresses des contrats.
 
 ### Prérequis
 
@@ -444,226 +610,7 @@ Le pipeline effectuera automatiquement :
 
 Dans GitHub → **Actions → Deploy to DigitalOcean → Run workflow**.
 
----
 
-## ⛓️ Tutoriel — Déploiement des Smart Contracts
-
-Cette section couvre le déploiement depuis zéro des 3 contrats Solidity qui alimentent le backend. À effectuer **avant** de lancer le backend pour la première fois, ou à chaque mise à jour des contrats.
-
-### Présentation des contrats
-
-| Contrat | Fichier | Rôle |
-|---|---|---|
-| **Token** | `Token.sol` | Token ERC-20 BFK — monnaie de la DAO |
-| **TokenGatedDao** | `TokenGatedDao.sol` | Registre des membres et droits d'accès |
-| **GovernanceDAO** | `GovernanceDAO.sol` | Cycle complet des propositions et votes |
-
-Les 3 contrats sont déployés en une seule commande via le script unifié `deploy-complete.js`.
-
----
-
-### Prérequis Hardhat
-
-#### Outils nécessaires
-
-```bash
-# Node.js v20 LTS requis
-node --version  # → v20.x.x
-
-# Yarn (gestionnaire de paquets du sous-projet Hardhat)
-npm install -g yarn
-```
-
-#### Installer les dépendances Hardhat
-
-```bash
-# Se placer dans le sous-dossier hardhat
-cd hardhat
-
-yarn install
-```
-
----
-
-### Configurer le wallet de déploiement
-
-#### Étape 1 — Créer un wallet dédié au déploiement
-
-> ⚠️ Ne jamais utiliser votre wallet personnel pour déployer des contrats. Créez-en un dédié.
-
-Utilisez la tâche Hardhat intégrée :
-
-```bash
-npx hardhat create-account
-```
-
-Sortie :
-```
-PRIVATE_KEY="0xabc123..."
-
-Your account address: 0x4A5b6C7dXXXXXXXX
-```
-
-#### Étape 2 — Alimenter le wallet en CELO
-
-Pour déployer sur **Celo Sepolia (testnet)**, obtenez des CELO de test gratuits :
-1. Rendez-vous sur **[faucet.celo.org](https://faucet.celo.org)**
-2. Choisissez le réseau **Celo Sepolia**
-3. Collez l'adresse de votre wallet de déploiement
-4. Cliquez sur **Faucet**
-
-> Vous aurez besoin d'au moins **0.1 CELO** pour les 3 déploiements.
-
-Pour le **Mainnet Celo**, achetez du CELO sur un exchange (Coinbase, Binance) et transférez-le vers l'adresse de déploiement.
-
-#### Étape 3 — Créer le fichier de configuration Hardhat
-
-```bash
-# Dans le dossier hardhat/
-cp .envexample .env
-nano .env
-```
-
-Contenu du fichier `hardhat/.env` :
-
-```env
-# Clé privée du wallet de déploiement (SANS le préfixe 0x)
-PRIVATE_KEY=votre_cle_privee_ici_sans_0x
-```
-
-> ⚠️ Ce fichier est dans `.gitignore`. Ne le commitez jamais.
-
----
-
-### Déploiement complet (Token + DAO + Gouvernance)
-
-#### Vérifier la connexion au réseau
-
-Avant de déployer, assurez-vous que votre wallet est bien connecté :
-
-```bash
-# Dans hardhat/
-npx hardhat accounts --network celosepolia
-```
-
-Sortie attendue :
-```
-0x4A5b6C7dXXXXXX  ← votre adresse de déploiement
-```
-
-```bash
-# Vérifier le solde
-npx hardhat run scripts/check-gas.js --network celosepolia
-```
-
-#### Lancer le déploiement
-
-```bash
-# Déploiement sur Celo Sepolia (testnet)
-npx hardhat run scripts/deploy-complete.js --network celosepolia
-```
-
-Sortie attendue :
-```
-🚀 DÉMARRAGE DU DÉPLOIEMENT COMPLET sur celosepolia
-===================================================
-📝 Compte de déploiement: 0x4A5b6C7dXXXXXXXX
-💰 Solde: 0.25 CELO
-
-📄 [1/3] Déploiement du contrat TOKEN...
-✅ Token déployé: 0xAAAA...1111
-
-🏛️  [2/3] Déploiement du contrat TokenGatedDao...
-✅ TokenGatedDao déployé: 0xBBBB...2222
-
-⚖️  [3/3] Déploiement du contrat GovernanceDAO...
-✅ GovernanceDAO déployé: 0xCCCC...3333
-
-👑 Configuration des rôles...
-   • Rôle MODERATOR attribué à l'admin
-   • Rôle VALIDATOR attribué à l'admin
-
-📝 Mise à jour des fichiers de configuration...
-✅ .env mis à jour
-✅ backend/.env mis à jour
-
-🎉 DÉPLOIEMENT TERMINÉ AVEC SUCCÈS !
-===================================================
-📍 Token:      0xAAAA...1111
-📍 DAO:        0xBBBB...2222
-📍 Governance: 0xCCCC...3333
-===================================================
-```
-
-> 💡 Le script met automatiquement à jour `hardhat/.env` **et** `backend/.env` avec les nouvelles adresses et le bloc de déploiement. Pas besoin de copier-coller manuellement.
-
-#### Redéployer un contrat individuellement
-
-Si vous avez besoin de redéployer uniquement un contrat :
-
-```bash
-# Déploiement manuel d'un contrat spécifique
-npx hardhat run scripts/manual_deploy.js --network celosepolia
-```
-
----
-
-### Vérifier le déploiement
-
-#### Tester la connexion aux contrats
-
-```bash
-# Test de connexion complet (Token + Governance)
-npx hardhat run scripts/test-governance-connection.js --network celosepolia
-```
-
-#### Vérifier le solde après déploiement
-
-```bash
-npx hardhat run scripts/check_balance_multi.js --network celosepolia
-```
-
-#### Vérifier sur l'explorateur blockchain
-
-Vos contrats sont publiquement vérifiables sur :
-- **Celo Sepolia explorer** : [celoscan.io](https://celoscan.io) → coller l'adresse du contrat
-- Vous verrez le code source, les transactions et l'état du contrat
-
----
-
-### Mettre à jour le backend
-
-Après un déploiement, le fichier `backend/.env` est automatiquement mis à jour par le script. Vérifiez néanmoins que ces variables sont bien présentes :
-
-```bash
-# Vérifier le contenu du .env du backend
-cat ../.env | grep -E 'CONTRACT|BLOCK'
-```
-
-Doit afficher :
-```env
-TOKEN_CONTRACT_ADDRESS=0xAAAA...1111
-DAO_CONTRACT_ADDRESS=0xBBBB...2222
-GOVERNANCE_CONTRACT_ADDRESS=0xCCCC...3333
-GOVERNANCE_DEPLOYMENT_BLOCK=9876543
-```
-
-Ensuite, redémarrez le backend pour charger les nouvelles adresses :
-
-```bash
-# Depuis la racine du projet backend
-npm run dev
-# Ou avec Docker
-make restart
-```
-
-**Vérification finale :**
-```bash
-curl http://localhost:3001/api/health
-```
-Les adresses de contrats dans la réponse doivent correspondre aux nouvelles adresses déployées.
-
----
 
 ## 📖 Tutoriel — Utilisation de l'API
 
