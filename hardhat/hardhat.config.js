@@ -20,7 +20,7 @@ module.exports = {
     // defaultNetwork,
     networks: {
         celosepolia: {
-            url: "https://celo-sepolia.drpc.org",
+            url: "https://forno.celo-sepolia.celo-testnet.org",
             accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
             chainId: 11142220, // Celo Sepolia Chain ID
             timeout: 120000, // 2 minutes
